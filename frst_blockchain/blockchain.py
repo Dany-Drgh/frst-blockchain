@@ -1,6 +1,7 @@
 import hashlib
 import json
-from time import time
+from random import random
+from time import datetime
 from urllib import request
 from urllib.parse import urlparse
 
@@ -76,11 +77,10 @@ class Blockchain(object):
         # return: <dict> New Block
         block = {
             'index': len(self.chain) + 1,
-            'timestamp': time(),
+            'timestamp': datetime.utcnow().isoformat(),
             'transactions': self.current_transactions,
-            'proof': proof,
             'previous_hash': previous_hash or self.hash(self.chain[-1]),
-            'nonce': None,
+            'nonce': format(random.getrandbits(64), "x"),
         }
         # Get the hash of this new block, and add it to the block
         block_hash = self.hash(block)
@@ -88,8 +88,6 @@ class Blockchain(object):
 
         # Resetting current transaction lists
         self.current_transactions = []
-
-        self.chain.append(block)
         return block        
 
     def new_transaction(self, sender, recipient, amount ):
@@ -103,25 +101,23 @@ class Blockchain(object):
 
         return self.last_block['index']+1
 
-    def proof_of_work(self, last_proof):
+    def proof_of_work(self):
         # Simple Proof of Work Algorithm:
-        #  - Find a number p' such that hash(pp') contains leading 4 zeroes, where p is the previous p'
-        #  - p is the previous proof, and p' is the new proof
-
-        proof = 0
-        while self.valid_proof(last_proof, proof) is False:
-            proof += 1
-
-        return proof
+        # New block is created if block's hash starts with '0000' block is added to the chain
+        # If block is not valid try again.
+        # return valid block's nonce
+        while True:
+            new_block = self.new_block()
+            if self.valid_block(new_block):
+                break 
+        self.chain.append(new_block)
+        return new_block['nonce']
 
 
     @staticmethod
-    def valid_proof(last_proof, proof):
-
-        # Validates the Proof: Does hash(last_proof, proof) contain 4 leading zeroes?
-        guess = f'{last_proof}{proof}'.encode()
-        guess_hash = hashlib.sha256(guess).hexdigest()
-        return guess_hash[:4] == '0000'
+    def valid_block(self):
+        # Validates the Proof: Does hash(block) start with 4 zeroes?
+        return block['hash'].startswith('0000')
 
     @staticmethod 
     def hash(block):
