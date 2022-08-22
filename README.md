@@ -12,5 +12,5 @@ ____________________________________
 https://github.com/Dany-Drgh/-OLD-_frst_blockchain
 ____________________________________
 V.0.1.0 (22 Aug 2022)
-
-Used Libraries: requests 2.26.0 urllib 1.26.7 flask 2.0.3
+Python 3.9
+Used Libraries: requests 2.28.1 flask 2.2.2
