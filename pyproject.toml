@@ -8,6 +8,11 @@ authors = ["Dany Darghouth <danydarghouth@gmail.com>"]
 python = "^3.9"
 requests = "^2.28.1"
 Flask = "^2.2.2"
+PyNaCl = "^1.5.0"
+structlog = "^22.1.0"
+colorama = "^0.4.5"
+marshmallow = "^3.17.1"
+marshmallow-oneofschema = "^3.0.1"
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.2"
