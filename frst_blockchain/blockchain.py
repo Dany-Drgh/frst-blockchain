@@ -1,123 +1,60 @@
-import hashlib
+import asyncio
+from asyncio.log import logger
 import json
-from random import random
-from time import datetime
-from urllib import request
-from urllib.parse import urlparse
+import math
+import random
+from hashlib import sha256
+from time import time
 
+import structlog
+
+logger = structlog.getlogger("blockchain")
 
 class Blockchain(object):
     def __init__(self):
         self.chain = []
-        self.current_transactions = []
-        self.nodes = set()
+        self.pending_transactions = []
+        self.target = "0000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
 
-        self.new_block(proof= 100, previous_hash=1)
-    
-    def register_node (self, address):
-        #Add new node to list of nodes
-        parsed_url = urlparse(address)
-        self.nodes.add(parsed_url.netloc)
-        
-    def valid_node (self, chain):
-        # Check given blockchain validity
-        last_block = chain[0]
-        current_index = 1
+        # Create the genesis block
+        logger.info("Creating Genesis block.")
+        self.chain.append(self.new_block())
 
-        while current_index < len(chain):
-            block = chain[current_index]
-            print(f'{last_block}')
-            print(f'{block}')
-            print("\n--------------------\n")
 
-            # Check that hash is correct
-            if block['previous_hash'] != self.hash(last_block):
-                return False
-            
-            # Check that P.O.W. is correct
-            if not self.valid_proof(last_block['proof'], block['proof']):
-                return False
-
-            last_block = block
-            current_index += 1
-        return True
-
-    def resolve_conflicts(self):
-        # Consensus algorithm, resolves conflicts by replacing all chains with longest valid one
-        # returns True if chain replaced False if not 
-        neighbors = self.nodes
-        new_chain = None
-
-        max_length = len(self.chain) # Longest known length of chain
-
-        # Check all chains from neighbors
-        for node in neighbors:
-            response = request.get(f'http://{node}/chain')
-        
-            if response.status_code == 200:
-                length = response.json()['length']
-                chain = response.json()['chain']
-
-            # Compare chains lengths and check for validity
-            if length > max_length and self.valid_chain(chain):
-                max_length = length
-                new_chain = chain
-        
-        # If new chain is found replace old one 
-        if new_chain:
-            self.chain = new_chain
-            return True
-        
-        return False
-
-    def new_block(self, proof, previous_hash=None):
+    def new_block(self):
         # Create a new Block in the Blockchain
         # proof: <int> The proof given by the Proof of Work algorithm
         # previous_hash: (Optional) <str> Hash of previous Block
         # return: <dict> New Block
         block = {
-            'index': len(self.chain) + 1,
-            'timestamp': datetime.utcnow().isoformat(),
-            'transactions': self.current_transactions,
-            'previous_hash': previous_hash or self.hash(self.chain[-1]),
+            'height': len(self.chain) + 1,
+            'transactions': self.pending_transactions,
+            'previous_hash': self.last_block["hash"] if self.last_block else None,
             'nonce': format(random.getrandbits(64), "x"),
+            'target' : self.target,
+            'timestamp': time(),
         }
-        # Get the hash of this new block, and add it to the block
-        block_hash = self.hash(block)
-        block["hash"] = block_hash
 
         # Resetting current transaction lists
-        self.current_transactions = []
+        self.pending_transactions = []
         return block        
 
-    def new_transaction(self, sender, recipient, amount ):
-        # Creates a new transaction to go into the next mined Block
-        # :return: <int> The index of the Block that will hold this transaction
-        self.current_transactions.append({
-            'sender': sender,
-            'recipient' : recipient,
-            'amount' : amount
-        } )
-
-        return self.last_block['index']+1
-
-    def proof_of_work(self):
-        # Simple Proof of Work Algorithm:
-        # New block is created if block's hash starts with '0000' block is added to the chain
-        # If block is not valid try again.
-        # return valid block's nonce
-        while True:
-            new_block = self.new_block()
-            if self.valid_block(new_block):
-                break 
-        self.chain.append(new_block)
-        return new_block['nonce']
-
-
     @staticmethod
-    def valid_block(block):
-        # Validates the Proof: Does hash(block) start with 4 zeroes?
-        return block['hash'].startswith('0000')
+    def create_block(height, transactions, previous_hash, nonce, target, timestamp=None):
+        block = {
+            "height": height,
+            "transactions": transactions,
+            "previous_hash": previous_hash,
+            "nonce": nonce,
+            "target": target,
+            "timestamp": timestamp or time(),
+        }
+        
+        # Get the hash of this new block, and add it to the block
+        block_string = json.dumps(block, sort_keys=True).encode()
+        block["hash"] = sha256(block_string).hexdigest()
+        
+        return block
 
     @staticmethod 
     def hash(block):
@@ -129,5 +66,60 @@ class Blockchain(object):
     @property
     def last_block(self):
         # Returns last Block of the blockchain
-        return self.chain[-1]
+        return self.chain[-1] if self.chain else None
+
+    @staticmethod
+    def valid_block(self, block):
+        # Validates the Proof: Does hash(block) start with 4 zeroes?
+        return block['hash']< self.target
+
+    def add_block(self, block):
+        # /!\ TO DO: Add proper validation logic here /!\
+        self.chain.append(block)
+
+    def recalculate_target(self, block_index):
+        # Retruns the number we need to get below to to mine a block   
+
+        #Check if recalculation is needed:
+        if block_index % 10 == 0:
+            # Expected timespan of 10 blocks
+            expected_timespan = 10*10 
+
+            # Calculate actual time span
+            actual_timespan = self.chain[-1]["timepstamp"]- self.chain[-10]["timestamp"]
+
+            # Calculate and ajust offset
+            ratio = actual_timespan/expected_timespan
+            ratio = max(0.25, ratio)
+            ratio = min(4.00, ratio)
+
+            # Calculate new target by multiplying current one by ratio
+            new_target = int(self.target, 16) * ratio
+
+            self.target = format(math.floor(new_target), "x").zfill(64)
+            logger.info(f"Calculated new mining target:{self.target}")
+            return self.target
+
+    async def get_blocks_after_timestamp(self, timestamp):
+        for index, block in enumerate(self.chain):
+            if timestamp < block["timestamp"]:
+                return self.chain[index:]
+
+    async def mine_new_block(self):
+        self.recalculate_target(self.last_block["index"] + 1 )
+        while True:
+            new_block = self.new_block()
+            if self.valid_block(new_block):
+                break
+                
+                await asyncio.sleep(0)
+
+        self.chain.append(new_block)
+        logger.info(f"Found a new block: {new_block}")
+
+        
+
+    
+
+
 
