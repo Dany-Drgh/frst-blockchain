@@ -55,7 +55,7 @@ class Blockchain(object):
             response = request.get(f'http://{node}/chain')
         
             if response.status_code == 200:
-                length = resposne.json()['length']
+                length = response.json()['length']
                 chain = response.json()['chain']
 
             # Compare chains lengths and check for validity
@@ -115,7 +115,7 @@ class Blockchain(object):
 
 
     @staticmethod
-    def valid_block(self):
+    def valid_block(block):
         # Validates the Proof: Does hash(block) start with 4 zeroes?
         return block['hash'].startswith('0000')
 
