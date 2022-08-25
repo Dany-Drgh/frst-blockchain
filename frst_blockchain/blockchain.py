@@ -3,6 +3,7 @@ from asyncio.log import logger
 import json
 import math
 import random
+import hashlib
 from hashlib import sha256
 from time import time
 
